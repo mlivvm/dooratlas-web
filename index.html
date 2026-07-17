@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="format-detection" content="telephone=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data: blob: https://*.jotform.com; connect-src 'self' http://127.0.0.1:8000 https://api.datasidekick.nl https://api.emailjs.com https://api.ipify.org https://ipapi.co; worker-src 'self' blob: https://cdnjs.cloudflare.com; child-src 'self' blob: https://cdnjs.cloudflare.com; frame-src 'self'; media-src 'self' blob:; font-src 'self' data:; manifest-src 'self'; form-action 'self'; base-uri 'self'; object-src 'none'">
+  <title>DoorAtlas</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js" integrity="sha384-SALc35EccAf6RzGw4iNsyj7kTPr33K7RoGzYu+7heZhT8s0GZouafRiCg1qy44AS" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" integrity="sha384-6LFfkTKLRlzFtgx8xsWyBdKGpcMMQTkv+dB7rAbugeJAu1Ym2q1Aji1cjHBG12Xh" crossorigin="anonymous">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" integrity="sha384-jrOgQzBlDeUNdmQn3rUt/PZD+pdcRBdWd/HWRqRo+n2OR2QtGyjSaJC0GiCeH+ir" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="app.css?v=1.9.88">
+</head>
+<body>
+
+  <!-- Splash screen (shown until JS determines login state) -->
+  <div id="splash-screen" style="position:fixed;inset:0;background:#f5f5f5;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
+    <div style="width:48px;height:48px;border:4px solid #ddd;border-top-color:#1a73e8;border-radius:50%;animation:splash-spin 0.8s linear infinite;"></div>
+  </div>
+  <style>@keyframes splash-spin{to{transform:rotate(360deg)}}</style>
+
+  <!-- Login screen -->
+  <div class="login-screen" id="login-screen" style="display:none;">
+    <div style="position:absolute; bottom:12px; left:16px; font-size:12px; color:#aaa;">v1.9.88</div>
+    <div class="environment-badge environment-badge-login" id="login-environment-badge" hidden>STAGING</div>
+    <div class="login-box">
+      <img class="login-logo" src="icon-192.png" alt="">
+      <h1>DoorAtlas</h1>
+      <p>Deuren, plattegronden en inspectiestatus</p>
+      <input type="text" id="login-username" placeholder="Gebruiker" autocomplete="username" autocapitalize="none" spellcheck="false">
+      <div class="login-password-field">
+        <input type="password" id="login-password" placeholder="Wachtwoord" autocomplete="off">
+        <button type="button" class="login-password-toggle" id="login-password-toggle" aria-label="Wachtwoord tonen" aria-pressed="false" title="Wachtwoord tonen">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
+      </div>
+      <label for="login-remember" style="display:inline-flex; align-items:center; gap:8px; margin-bottom:16px; font-size:14px; color:#666; cursor:pointer;">
+        <input type="checkbox" id="login-remember" style="width:18px; height:18px; flex-shrink:0; margin:0;"> <span style="line-height:1;">Ingelogd blijven</span>
+      </label>
+      <button id="login-btn">Inloggen</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+
+  <!-- App (hidden until logged in) -->
+  <div id="app-container" style="display:none;">
+  <div style="position:fixed; bottom:12px; left:16px; font-size:12px; color:#aaa; z-index:1000; pointer-events:none;">v1.9.88</div>
+
+  <!-- Toast notification -->
+  <div id="toast" style="display:none; position:fixed; top:calc(env(safe-area-inset-top) + var(--topbar-h, 52px) + 12px); left:50%; transform:translateX(-50%); padding:14px 28px; border-radius:10px; font-size:16px; font-weight:600; z-index:500; box-shadow:0 4px 16px rgba(0,0,0,0.25); cursor:pointer; max-width:90vw; text-align:center;"></div>
+
+  <!-- Shared busy overlay for save/update operations -->
+  <div id="busy-overlay" class="busy-overlay" style="display:none;" aria-live="polite"></div>
+
+  <!-- Top bar with dropdowns -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img class="topbar-logo" src="dooratlas-logo-white.png?v=1.9.88" alt="DoorAtlas" width="106" height="30">
+    </div>
+    <span class="environment-badge environment-badge-topbar" id="topbar-environment-badge" hidden>STAGING</span>
+    <button class="btn-reset app-dashboard-btn" id="btn-dashboard" style="display:none;">Dashboard</button>
+    <select id="customer-select">
+      <option value="">-- Kies klant --</option>
+    </select>
+    <select id="floorplan-select" disabled>
+      <option value="">-- Kies plattegrond --</option>
+    </select>
+    <button type="button" class="selector-context-btn" id="desktop-context-picker-btn" aria-label="Klant en plattegrond kiezen">
+      <svg class="selector-context-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.3-4.3"></path>
+      </svg>
+      <span class="selector-context-copy">
+        <span class="selector-context-customer" id="desktop-context-customer-value">Klant en plattegrond kiezen</span>
+        <span class="selector-context-floorplan" id="desktop-context-floorplan-value" hidden></span>
+      </span>
+    </button>
+    <div class="selector-pills" id="selector-pills">
+      <button type="button" class="selector-pill" id="customer-picker-btn">
+        <span class="selector-label">Klant</span>
+        <span class="selector-value" id="customer-picker-value">Kies klant</span>
+      </button>
+      <button type="button" class="selector-pill" id="floorplan-picker-btn" disabled>
+        <span class="selector-label">Plattegrond</span>
+        <span class="selector-value" id="floorplan-picker-value">Kies plattegrond</span>
+        <span class="selector-meta" id="floorplan-picker-meta" hidden></span>
+      </button>
+    </div>
+    <button type="button" class="topbar-metadata-btn" id="btn-topbar-metadata" title="Plattegrondgegevens aanpassen" aria-label="Plattegrondgegevens aanpassen" hidden disabled>&#128295;</button>
+    <span class="topbar-spacer"></span>
+    <div class="connection-indicator" id="connection-indicator" title="Online">
+      <span class="connection-dot"></span>
+      <span class="connection-label" id="connection-label">Online</span>
+    </div>
+    <div class="sync-indicator" id="sync-indicator" title="Status sync wacht" style="display:none;">
+      <span class="sync-dot"></span>
+      <span id="sync-label">Sync 0</span>
+    </div>
+    <button class="app-update-btn" id="btn-app-update" type="button" hidden>Update</button>
+    <button class="btn-reset" id="btn-reset" style="display:none;">Reset zoom</button>
+    <button class="btn-reset" id="btn-edit" style="display:none;">&#9998; Bewerken</button>
+    <div style="position:relative;">
+      <button class="btn-reset" id="btn-menu" style="padding:6px 10px; font-size:18px; line-height:1;">&#9776;</button>
+      <div id="topbar-menu" style="display:none; position:absolute; right:0; top:100%; margin-top:4px; background:white; border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.2); min-width:160px; z-index:200; overflow:hidden;">
+        <button id="btn-upload" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Plattegrond toevoegen</button>
+        <button id="btn-menu-labels" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Labels tonen</button>
+        <button id="btn-menu-marker-outline" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Bolletjes als rand</button>
+        <button id="btn-print-floorplan" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Print plattegrond</button>
+        <button id="btn-export-excel" style="display:none; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Export Excel</button>
+        <button id="btn-edit-fp-metadata" style="display:none; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#1a73e8; text-align:left; cursor:pointer;">Gegevens bewerken</button>
+        <button id="btn-edit-image" style="display:none; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#1a73e8; text-align:left; cursor:pointer;">Plattegrond bewerken</button>
+        <button id="btn-delete-fp" style="display:none; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#d93025; text-align:left; cursor:pointer;">Plattegrond verwijderen</button>
+        <div style="border-top:1px solid #eee;"></div>
+        <button id="btn-report-problem" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#333; text-align:left; cursor:pointer;">Probleem melden</button>
+        <button id="btn-logout" style="display:block; width:100%; padding:14px 20px; border:none; background:white; font-size:16px; font-weight:600; color:#d93025; text-align:left; cursor:pointer;">Uitloggen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin dashboard -->
+  <section id="admin-dashboard" class="admin-dashboard" style="display:none;" aria-label="Beheerdashboard">
+    <div class="admin-dashboard-header">
+      <div>
+        <div class="admin-dashboard-kicker">DoorAtlas beheer</div>
+        <h2>Plattegronden en deuren</h2>
+        <div class="admin-dashboard-meta" id="admin-dashboard-freshness">Nog niet bijgewerkt</div>
+      </div>
+      <div class="admin-dashboard-actions">
+        <section class="admin-online-panel" id="admin-online-panel" role="button" tabindex="0" aria-label="Online gebruikers bekijken">
+          <div class="admin-online-title">Online nu</div>
+          <div class="admin-online-rule"></div>
+          <div class="admin-online-row"><span>admin</span><strong id="admin-online-admin">—</strong></div>
+          <div class="admin-online-row"><span>monteur</span><strong id="admin-online-monteur">—</strong></div>
+          <div class="admin-online-row"><span>viewer</span><strong id="admin-online-viewer">—</strong></div>
+        </section>
+        <button type="button" id="admin-dashboard-refresh" class="admin-dashboard-secondary">Vernieuwen</button>
+      </div>
+    </div>
+
+    <nav class="admin-dashboard-tabs" aria-label="Dashboard onderdelen">
+      <button type="button" class="admin-dashboard-tab active" id="admin-tab-overview" data-admin-tab="overview" aria-selected="true">Overzicht</button>
+      <button type="button" class="admin-dashboard-tab" id="admin-tab-door-search" data-admin-tab="door-search" aria-selected="false">Deur zoeken</button>
+      <button type="button" class="admin-dashboard-tab" id="admin-tab-floorplans" data-admin-tab="floorplans" aria-selected="false">Plattegronden</button>
+      <button type="button" class="admin-dashboard-tab" id="admin-tab-details" data-admin-tab="details" aria-selected="false">Details</button>
+    </nav>
+
+    <div class="admin-dashboard-tabshell">
+      <section class="admin-tab-panel active" id="admin-tabpanel-overview" data-admin-panel="overview">
+        <div class="admin-kpi-grid" id="admin-kpi-grid">
+          <button type="button" class="admin-kpi" data-admin-kpi="customers" aria-pressed="false"><span>Klanten</span><strong id="admin-kpi-customers">0</strong></button>
+          <button type="button" class="admin-kpi" data-admin-kpi="floorplans" aria-pressed="false"><span>Plattegronden</span><strong id="admin-kpi-floorplans">0</strong></button>
+          <button type="button" class="admin-kpi" data-admin-kpi="doors" aria-pressed="false"><span>Deuren</span><strong id="admin-kpi-doors">0</strong></button>
+          <button type="button" class="admin-kpi" data-admin-kpi="open" aria-pressed="false"><span>Openstaand</span><strong id="admin-kpi-open">0</strong></button>
+          <button type="button" class="admin-kpi" data-admin-kpi="done" aria-pressed="false"><span>Afgerond</span><strong id="admin-kpi-done">0</strong></button>
+          <button type="button" class="admin-kpi attention" data-admin-kpi="attention" aria-pressed="true"><span>Aandacht</span><strong id="admin-kpi-attention">0</strong></button>
+        </div>
+
+        <div class="admin-overview-grid">
+          <section class="admin-overview-card">
+            <div class="admin-overview-card-title">
+              <strong id="admin-overview-kpi-title">Aandacht nodig</strong>
+              <span id="admin-overview-kpi-subtitle">Rode status</span>
+            </div>
+            <div class="admin-overview-list" id="admin-overview-attention"></div>
+          </section>
+
+          <section class="admin-overview-card">
+            <div class="admin-overview-card-title">
+              <strong>Meeste open deuren</strong>
+              <span>Nog te doen</span>
+            </div>
+            <div class="admin-overview-list" id="admin-overview-open"></div>
+          </section>
+
+          <section class="admin-overview-card admin-overview-card-wide">
+            <div class="admin-overview-card-title">
+              <strong>Recente activiteit</strong>
+              <span>Status updates</span>
+            </div>
+            <div class="admin-activity-list" id="admin-activity-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" id="admin-tabpanel-door-search" data-admin-panel="door-search" hidden>
+        <div class="admin-door-search admin-door-search-tab">
+          <label class="admin-dashboard-label" for="admin-door-search">Deur zoeken</label>
+          <input id="admin-door-search" class="admin-dashboard-input admin-dashboard-search-large" type="search" placeholder="Typ deurcode, bijvoorbeeld D01" autocomplete="off">
+          <div class="admin-door-filter-grid">
+            <label class="admin-door-filter-field" for="admin-door-group">
+              <span>Lijstweergave</span>
+              <select id="admin-door-group" class="admin-dashboard-input">
+                <option value="">Deurcode A-Z</option>
+                <option value="desc">Deurcode Z-A</option>
+              </select>
+            </label>
+            <label class="admin-door-filter-field" for="admin-door-customer-filter">
+              <span>Klant</span>
+              <select id="admin-door-customer-filter" class="admin-dashboard-input">
+                <option value="">Alle klanten</option>
+              </select>
+            </label>
+            <label class="admin-door-filter-field" for="admin-door-floorplan-filter">
+              <span>Plattegrond</span>
+              <select id="admin-door-floorplan-filter" class="admin-dashboard-input" disabled>
+                <option value="">Kies eerst een klant</option>
+              </select>
+            </label>
+          </div>
+          <div class="admin-door-results" id="admin-door-results"></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" id="admin-tabpanel-floorplans" data-admin-panel="floorplans" hidden>
+        <div class="admin-floorplans-layout">
+          <aside class="admin-dashboard-sidebar">
+            <label class="admin-dashboard-label" for="admin-dashboard-search">Zoeken</label>
+            <input id="admin-dashboard-search" class="admin-dashboard-input" type="search" placeholder="Klant, pand of plattegrond" autocomplete="off">
+            <div class="admin-dashboard-label admin-filter-heading">Klanten</div>
+            <div class="admin-filter-list" id="admin-customer-filters"></div>
+            <div class="admin-dashboard-label admin-filter-heading" id="admin-location-filter-heading">Locatie</div>
+            <div class="admin-location-filter-control" id="admin-location-filters"></div>
+          </aside>
+
+          <main class="admin-floorplan-panel">
+            <div class="admin-panel-title">
+              <div>
+                <strong>Plattegronden</strong>
+                <span id="admin-floorplan-count">0 gevonden</span>
+              </div>
+              <div class="admin-bulk-actions">
+                <button type="button" id="admin-bulk-toggle" class="admin-dashboard-secondary">Bulk selecteren</button>
+                <button type="button" id="admin-bulk-select-visible" class="admin-dashboard-secondary" hidden>Selecteer zichtbaar</button>
+                <button type="button" id="admin-bulk-clear" class="admin-dashboard-secondary" hidden>Wis selectie</button>
+                <button type="button" id="admin-bulk-cancel" class="admin-dashboard-secondary" hidden>Stop bulk</button>
+              </div>
+            </div>
+            <div class="admin-floorplan-list" id="admin-floorplan-list"></div>
+          </main>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" id="admin-tabpanel-details" data-admin-panel="details" hidden>
+        <aside class="admin-detail-panel" id="admin-detail-panel">
+          <div class="admin-detail-empty" id="admin-detail-empty">Selecteer een plattegrond of deur.</div>
+          <div class="admin-detail-content" id="admin-detail-content" style="display:none;">
+            <div class="admin-door-detail-card" id="admin-door-detail-card" hidden>
+              <div>
+                <div class="admin-door-detail-label">Geselecteerde deur</div>
+                <div class="admin-door-detail-main">
+                  <span class="admin-status-dot" id="admin-door-detail-dot"></span>
+                  <strong id="admin-door-detail-code">-</strong>
+                  <span id="admin-door-detail-status">-</span>
+                </div>
+                <div class="admin-door-detail-meta" id="admin-door-detail-meta"></div>
+              </div>
+              <button type="button" id="admin-door-detail-open" class="admin-dashboard-primary">Open deur op plattegrond</button>
+            </div>
+            <div class="admin-detail-workspace">
+              <section class="admin-detail-preview-column">
+                <div class="admin-detail-heading">
+                  <div>
+                    <h3 id="admin-detail-title">Plattegrond</h3>
+                    <p id="admin-detail-meta"></p>
+                  </div>
+                  <button type="button" id="admin-detail-open" class="admin-dashboard-primary">Openen</button>
+                </div>
+                <div class="admin-detail-stats" id="admin-detail-stats"></div>
+                <div class="admin-detail-preview" id="admin-detail-preview">
+                  <span>Preview laden na selectie</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+    </div>
+
+  </section>
+
+  <div class="admin-sessions-overlay" id="admin-sessions-overlay" style="display:none;"></div>
+  <div class="admin-sessions-popup" id="admin-sessions-popup" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="admin-sessions-title">
+    <div class="admin-sessions-header">
+      <div>
+        <h3 id="admin-sessions-title">Online sessies</h3>
+        <p id="admin-sessions-summary">Actieve schermen in de laatste 10 minuten.</p>
+      </div>
+      <button type="button" id="admin-sessions-close" class="admin-metadata-close" aria-label="Sluiten">&times;</button>
+    </div>
+    <div class="admin-sessions-list" id="admin-sessions-list"></div>
+  </div>
+
+  <div class="admin-metadata-dialog-overlay" id="admin-metadata-dialog-overlay" hidden></div>
+  <div class="admin-metadata-dialog" id="admin-metadata-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="admin-metadata-dialog-title">
+    <div class="admin-metadata-dialog-header">
+      <div>
+        <h3 id="admin-metadata-dialog-title">Gegevens aanpassen</h3>
+        <p id="admin-metadata-dialog-context"></p>
+      </div>
+      <button type="button" id="admin-detail-cancel" class="admin-metadata-close" aria-label="Sluiten">&times;</button>
+    </div>
+    <div class="admin-edit-form">
+      <label class="admin-dashboard-label" for="admin-detail-customer">Klant</label>
+      <select id="admin-detail-customer" class="admin-dashboard-input" disabled></select>
+      <label class="admin-dashboard-label" for="admin-detail-building">Pand / locatie naam</label>
+      <input id="admin-detail-building" class="admin-dashboard-input" type="text" maxlength="100" placeholder="Bijv. Hoofdgebouw">
+      <label class="admin-dashboard-label" for="admin-detail-location-street">Straat + huisnummer</label>
+      <input id="admin-detail-location-street" class="admin-dashboard-input" type="text" maxlength="100">
+      <label class="admin-dashboard-label" for="admin-detail-location-postal-code">Postcode</label>
+      <input id="admin-detail-location-postal-code" class="admin-dashboard-input" type="text" maxlength="10">
+      <label class="admin-dashboard-label" for="admin-detail-location-city">Plaats</label>
+      <input id="admin-detail-location-city" class="admin-dashboard-input" type="text" maxlength="100">
+      <label class="admin-dashboard-label" for="admin-detail-location-note">Locatie-notitie</label>
+      <textarea id="admin-detail-location-note" class="admin-dashboard-input admin-dashboard-textarea" rows="3" maxlength="5000"></textarea>
+      <label class="admin-dashboard-label" for="admin-detail-floor-label">Verdieping / naam</label>
+      <input id="admin-detail-floor-label" class="admin-dashboard-input" type="text" maxlength="100" placeholder="Bijv. Begane grond">
+      <label class="admin-dashboard-label" for="admin-detail-level-order">Niveau</label>
+      <input id="admin-detail-level-order" class="admin-dashboard-input" type="number" min="-50" max="100" step="1">
+      <label class="admin-dashboard-label" for="admin-detail-floor-notes">Plattegrond-notitie</label>
+      <textarea id="admin-detail-floor-notes" class="admin-dashboard-input admin-dashboard-textarea" rows="3" maxlength="5000"></textarea>
+      <div class="admin-detail-error" id="admin-detail-error"></div>
+      <button type="button" id="admin-detail-save" class="admin-dashboard-primary">Gegevens opslaan</button>
+      <button type="button" id="admin-detail-delete" class="admin-dashboard-danger">Plattegrond verwijderen</button>
+    </div>
+  </div>
+
+  <!-- Customer/floorplan selector sheet -->
+  <div id="select-sheet-overlay" class="select-sheet-overlay" style="display:none;"></div>
+  <div id="select-sheet" class="select-sheet" style="display:none;" role="dialog" aria-modal="true">
+    <div class="select-sheet-header">
+      <div>
+        <div class="select-sheet-eyebrow" id="select-sheet-eyebrow">Kiezen</div>
+        <h2 id="select-sheet-title">Selecteer</h2>
+      </div>
+      <button type="button" id="select-sheet-close" class="select-sheet-close" aria-label="Sluiten">&times;</button>
+    </div>
+    <input type="search" id="select-sheet-search" class="select-sheet-search" placeholder="Zoeken..." autocomplete="off">
+    <div id="select-sheet-location-filters" class="select-sheet-filters" hidden></div>
+    <div id="select-sheet-list" class="select-sheet-list"></div>
+  </div>
+
+  <!-- Edit mode bar -->
+  <div class="edit-bar" id="edit-bar">
+    <span class="edit-label" style="flex:0 0 auto; min-width:100px;">Bewerkingsmodus</span>
+    <div style="display:flex; align-items:center; gap:8px; flex:1; justify-content:center;">
+      <label for="edit-marker-size" style="font-size:13px; color:#e67700; font-weight:600; white-space:nowrap;">Grootte:</label>
+      <input type="range" id="edit-marker-size" min="3" max="30" value="15" style="width:140px; height:36px;">
+      <span id="edit-size-label" style="font-size:13px; color:#e67700; min-width:24px;">15</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; flex:0 0 auto;">
+      <button id="btn-auto-number" class="btn-edit-toggle">Auto #</button>
+    </div>
+    <div style="flex:0 0 auto;">
+      <button class="btn-edit-cancel" id="btn-edit-cancel">Annuleren</button>
+      <button class="btn-edit-save" id="btn-edit-save">Opslaan</button>
+    </div>
+    <div id="auto-number-row" style="display:none; width:100%; align-items:center; gap:8px; flex-wrap:wrap; padding-top:4px; border-top:1px solid #f0c070;">
+      <label for="auto-prefix-input" style="font-size:13px; color:#e67700; font-weight:600; white-space:nowrap;">Prefix:</label>
+      <input type="text" id="auto-prefix-input" placeholder="bijv. D1BA" maxlength="20" autocomplete="off" style="width:110px; padding:6px 10px; border:1px solid #e67700; border-radius:6px; font-size:14px; font-weight:600;">
+      <select id="auto-padding-select" style="padding:6px 8px; border:1px solid #e67700; border-radius:6px; font-size:14px; color:#e67700; font-weight:600; background:white;">
+        <option value="2">01</option>
+        <option value="3" selected>001</option>
+      </select>
+      <span id="auto-next-preview" style="font-size:14px; color:#555; font-weight:600; white-space:nowrap;">→ (voer prefix in)</span>
+    </div>
+  </div>
+
+  <!-- Logout confirmation -->
+  <div id="logout-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="logout-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; text-align:center; min-width:260px;">
+    <p style="font-size:17px; font-weight:600; color:#333; margin-bottom:20px;">Weet je zeker dat je wilt uitloggen?</p>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="logout-confirm" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#d93025; color:white; font-weight:600; cursor:pointer;">Uitloggen</button>
+      <button id="logout-cancel" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Annuleren</button>
+    </div>
+  </div>
+
+  <!-- App update confirmation -->
+  <div id="app-update-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="app-update-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; text-align:center; width:min(340px, calc(100vw - 32px));">
+    <h3 style="font-size:18px; color:#1f2933; margin-bottom:8px;">Nieuwe versie beschikbaar</h3>
+    <p id="app-update-message" style="font-size:15px; color:#555; line-height:1.45; margin-bottom:18px;">Bijwerken duurt een paar seconden.</p>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="app-update-later" style="font-size:16px; padding:10px 22px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Later</button>
+      <button id="app-update-confirm" style="font-size:16px; padding:10px 22px; border:none; border-radius:8px; background:#1a73e8; color:white; font-weight:600; cursor:pointer;">Bijwerken</button>
+    </div>
+  </div>
+
+  <!-- Problem report -->
+  <div id="report-problem-overlay" class="report-problem-overlay" style="display:none;"></div>
+  <div id="report-problem-popup" class="report-problem-popup" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="report-problem-title">
+    <h3 id="report-problem-title">Probleem melden</h3>
+    <label class="report-problem-field">
+      <span>Categorie</span>
+      <select id="report-problem-category">
+        <option value="Anders">Anders</option>
+        <option value="Plattegrond klopt niet">Plattegrond klopt niet</option>
+        <option value="Deur/code klopt niet">Deur/code klopt niet</option>
+        <option value="Opname probleem">Opname probleem</option>
+        <option value="Onderhoud probleem">Onderhoud probleem</option>
+        <option value="App werkt traag/vast">App werkt traag/vast</option>
+      </select>
+    </label>
+    <label class="report-problem-field">
+      <span>Wat gaat er mis?</span>
+      <textarea id="report-problem-text" maxlength="700" rows="5" placeholder="Beschrijf kort wat er misgaat..."></textarea>
+    </label>
+    <div id="report-problem-error" class="report-problem-error"></div>
+    <div class="report-problem-actions">
+      <button id="report-problem-cancel" type="button" class="report-problem-secondary">Annuleren</button>
+      <button id="report-problem-submit" type="button" class="report-problem-primary" disabled>Versturen</button>
+    </div>
+  </div>
+
+  <!-- Excel export -->
+  <div id="export-excel-overlay" class="export-excel-overlay" style="display:none;"></div>
+  <div id="export-excel-popup" class="export-excel-popup" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="export-excel-title">
+    <div class="export-excel-header">
+      <div>
+        <div class="export-excel-kicker">Excel export</div>
+        <h3 id="export-excel-title">Deurcodes exporteren</h3>
+        <p id="export-excel-context">Kies eerst een plattegrond.</p>
+      </div>
+      <button id="export-excel-close" type="button" class="export-excel-close" aria-label="Export sluiten">&times;</button>
+    </div>
+    <div class="export-excel-actions">
+      <button id="export-excel-current" type="button" class="export-excel-primary">Huidige plattegrond</button>
+      <button id="export-excel-select" type="button" class="export-excel-secondary">Plattegronden selecteren</button>
+    </div>
+    <div id="export-excel-selection" class="export-excel-selection" hidden>
+      <div class="export-excel-selection-title">Plattegronden van deze klant</div>
+      <div id="export-excel-list" class="export-excel-list"></div>
+      <button id="export-excel-confirm" type="button" class="export-excel-primary">Geselecteerde exporteren</button>
+    </div>
+    <div id="export-excel-error" class="export-excel-error"></div>
+  </div>
+
+  <!-- Cancel edit confirmation -->
+  <div id="cancel-edit-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="cancel-edit-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; text-align:center; min-width:260px;">
+    <p style="font-size:17px; font-weight:600; color:#333; margin-bottom:20px;">Wijzigingen annuleren? Alles wordt teruggedraaid.</p>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="cancel-edit-confirm" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#d93025; color:white; font-weight:600; cursor:pointer;">Ja, annuleren</button>
+      <button id="cancel-edit-back" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Terug</button>
+    </div>
+  </div>
+
+  <!-- Edit popup + overlay -->
+  <div class="edit-overlay" id="edit-overlay"></div>
+  <div class="edit-popup" id="edit-popup">
+    <h3 id="edit-popup-title">Nieuwe deur</h3>
+    <div id="edit-popup-input-row" style="display:flex; gap:8px; margin-bottom:16px;">
+      <input type="text" id="edit-popup-input" placeholder="Deurcode" maxlength="20" autocomplete="off" style="flex:1; margin-bottom:0;">
+      <button id="btn-scan-qr" style="padding:8px 14px; border:none; border-radius:8px; background:#1a73e8; color:white; font-size:16px; font-weight:600; cursor:pointer; white-space:nowrap;">&#128247; Scan</button>
+    </div>
+    <div id="edit-popup-custom"></div>
+    <div id="edit-popup-error" style="color:#d93025; font-size:14px; font-weight:600; margin-bottom:12px; min-height:20px;"></div>
+    <div class="popup-buttons" id="edit-popup-buttons"></div>
+  </div>
+
+  <!-- QR Scanner overlay -->
+  <div id="qr-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:400; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="position:relative; width:min(80vw, 400px); max-width:400px;">
+      <div id="qr-reader" style="width:100%; border-radius:12px; overflow:hidden;"></div>
+      <p id="qr-status" style="color:white; font-size:15px; margin-top:12px; text-align:center;">Richt de camera op een QR code</p>
+      <button id="btn-qr-close" style="margin-top:16px; width:100%; padding:14px; border:none; border-radius:8px; background:white; color:#333; font-size:16px; font-weight:600; cursor:pointer;">Sluiten</button>
+    </div>
+  </div>
+
+  <!-- Info panel — always visible when floorplan is loaded -->
+  <div class="info-panel" id="info-panel" style="display:none;">
+    <div class="info-panel-main">
+      <div class="info-panel-door">
+        <span class="door-name" id="door-name">—</span>
+        <span class="door-status" id="door-status"></span>
+      </div>
+      <div class="door-detail-meta" id="door-detail-meta" hidden></div>
+      <div class="location-address-bar" id="location-address-bar" hidden>
+        <span class="location-address-name" id="location-address-name"></span>
+        <span class="location-address-text" id="location-address-text"></span>
+        <span class="location-address-note" id="location-address-note"></span>
+      </div>
+    </div>
+    <div class="info-panel-count" id="status-count"></div>
+    <div class="info-panel-actions">
+      <div class="jotform-actions" id="jotform-actions">
+        <button class="btn btn-jotform disabled" id="btn-jotform-inspection" data-jotform-type="inspection">Opname</button>
+        <button class="btn btn-jotform disabled" id="btn-jotform-maintenance" data-jotform-type="maintenance">Onderhoud</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SVG display area -->
+  <div class="loading loading--empty" id="loading"><div class="empty-state empty-state--selection">
+    <img class="empty-state-brand" src="dooratlas-logo-transparent.png?v=1.9.88" alt="DoorAtlas" width="234" height="66">
+    <div class="empty-state-title">Kies een plattegrond</div>
+    <div class="empty-state-sub">Kies een klant en plattegrond om te beginnen.</div>
+    <button type="button" class="empty-state-select-button" data-empty-state-select>
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="m20 20-4-4"></path>
+      </svg>
+      <span>Klant en plattegrond kiezen</span>
+    </button>
+  </div></div>
+  <div class="svg-container" id="svg-container" style="display:none;"></div>
+
+  <!-- Side panel collapse/expand button -->
+  <button class="btn-panel-toggle" id="btn-panel-toggle" type="button" style="display:none;" aria-label="Deurenpaneel uitklappen" title="Deurenpaneel uitklappen">&#8249;</button>
+
+  <!-- Door list and read-only inspection overview -->
+  <aside class="side-panel" id="side-panel" aria-label="Deuren en inspectiegegevens">
+    <section class="side-panel-list-view" id="side-panel-list-view">
+      <header class="side-panel-header">
+        <span class="side-panel-kicker">Huidige plattegrond</span>
+        <h2 id="side-panel-header">Deuren</h2>
+      </header>
+      <div class="side-panel-list" id="side-panel-list"></div>
+    </section>
+
+    <section class="door-inspector" id="door-inspector" hidden>
+      <header class="door-inspector-header">
+        <div class="door-inspector-toolbar">
+          <button type="button" class="door-inspector-back" id="door-inspector-back">
+            <span aria-hidden="true">&#8592;</span>
+            <span>Alle deuren</span>
+          </button>
+        </div>
+        <div class="door-inspector-title-row">
+          <div class="door-inspector-title">
+            <h2 id="door-inspector-code">Deur</h2>
+            <p id="door-inspector-name" hidden></p>
+          </div>
+          <span class="door-inspector-status" id="door-inspector-status" data-state="open">Open</span>
+        </div>
+        <p class="door-inspector-meta" id="door-inspector-meta"></p>
+        <p class="door-inspector-latest" id="door-inspector-latest">Nog geen inspectie</p>
+      </header>
+
+      <div class="door-inspector-tabs" role="tablist" aria-label="Inspectieoverzicht">
+        <button type="button" class="active" role="tab" aria-selected="true" data-inspector-tab="inspection">Opname</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-inspector-tab="maintenance">Onderhoud</button>
+      </div>
+      <div class="door-inspector-controls">
+        <div class="door-inspector-actions" aria-label="Inspectie toevoegen of bewerken">
+          <button type="button" data-inspector-new="inspection">+ Opname</button>
+          <button type="button" data-inspector-new="maintenance" hidden>+ Onderhoud</button>
+        </div>
+        <details class="door-inspector-history" id="door-inspector-history" hidden>
+          <summary title="Versiehistorie bekijken">
+            <span aria-hidden="true">&#128337;</span>
+            <span id="door-inspector-history-count">0 versies</span>
+          </summary>
+          <div class="door-inspector-history-list" id="door-inspector-history-list"></div>
+        </details>
+      </div>
+      <div class="door-inspector-body" id="door-inspector-body" role="tabpanel"></div>
+    </section>
+  </aside>
+
+  <!-- Upload floorplan popup -->
+  <div id="upload-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="upload-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; min-width:300px; max-width:90vw; max-height:85vh; overflow-y:auto;">
+    <!-- Upload metadata wizard starts with database context, then one file picker. -->
+    <div id="upload-step-choose" style="display:none;">
+      <input type="file" id="upload-file-input" accept=".pdf,application/pdf,.svg,image/svg+xml,image/*" multiple style="display:none;">
+    </div>
+    <!-- Single image/SVG preview -->
+    <div id="upload-step-preview" class="upload-single-step" style="display:none;">
+      <div class="upload-wizard-header">
+        <div class="upload-pdf-kicker">Plattegrond toevoegen</div>
+        <h3>Voorbeeld controleren</h3>
+        <p id="upload-preview-context" class="upload-wizard-context"></p>
+      </div>
+      <button type="button" id="upload-single-preview-button" class="upload-single-preview" aria-label="Plattegrond vergroot bekijken">
+        <img id="upload-preview-img" alt="Voorbeeld van gekozen plattegrond">
+      </button>
+      <div class="upload-wizard-footer">
+        <button id="btn-upload-retake" type="button" class="upload-nav-button upload-nav-back" aria-label="Terug naar bestand kiezen"><span aria-hidden="true">&#8592;</span><span>Terug</span></button>
+        <button id="btn-upload-accept" type="button" class="upload-nav-button upload-nav-next"><span>Verdieping invullen</span><span aria-hidden="true">&#8594;</span></button>
+      </div>
+    </div>
+    <!-- Step 2b: Multi-page PDF import -->
+    <div id="upload-step-pdf" class="upload-pdf-flow" style="display:none;">
+      <div class="upload-pdf-header">
+        <div>
+          <div class="upload-pdf-kicker">Plattegrond toevoegen</div>
+          <h3 id="upload-pdf-title">Bestanden en pagina's kiezen</h3>
+          <p id="upload-pdf-summary">Bestanden laden...</p>
+        </div>
+        <button id="btn-upload-pdf-close" type="button" class="upload-pdf-close" aria-label="PDF upload sluiten">&times;</button>
+      </div>
+
+      <div id="upload-pdf-processing" class="upload-pdf-processing">
+        <div class="upload-pdf-spinner"></div>
+        <p>PDF wordt verwerkt...</p>
+      </div>
+
+      <div id="upload-pdf-overview" class="upload-pdf-panel" style="display:none;">
+        <div class="upload-pdf-toolbar">
+          <div class="upload-pdf-count" id="upload-pdf-count">0 geselecteerd</div>
+          <div class="upload-pdf-toolbar-actions">
+            <button id="btn-upload-add-files" type="button" class="upload-pdf-secondary">Bestanden toevoegen</button>
+            <button id="btn-upload-pdf-select-all" type="button" class="upload-pdf-secondary">Alles selecteren</button>
+            <button id="btn-upload-pdf-select-none" type="button" class="upload-pdf-secondary">Niets selecteren</button>
+          </div>
+        </div>
+        <div id="upload-pdf-source-list" class="upload-source-list upload-source-list-wide"></div>
+        <div id="upload-pdf-pages" class="upload-pdf-grid"></div>
+        <div class="upload-pdf-footer">
+          <button id="btn-upload-pdf-retake" type="button" class="upload-nav-button upload-nav-back"><span aria-hidden="true">&#8592;</span><span>Terug</span></button>
+          <button id="btn-upload-pdf-next" type="button" class="upload-nav-button upload-nav-next"><span>Verdiepingen invullen</span><span aria-hidden="true">&#8594;</span></button>
+        </div>
+      </div>
+
+      <div id="upload-pdf-editor" class="upload-pdf-editor" style="display:none;">
+        <div class="upload-pdf-editor-bar">
+          <button id="btn-upload-pdf-editor-back" type="button" class="upload-pdf-secondary">Terug</button>
+          <strong id="upload-pdf-editor-title">Pagina bewerken</strong>
+          <div class="upload-pdf-editor-actions">
+            <button id="btn-upload-pdf-zoom-out" type="button" class="upload-pdf-secondary" aria-label="Uitzoomen">-</button>
+            <button id="btn-upload-pdf-zoom-fit" type="button" class="upload-pdf-secondary">Passend</button>
+            <button id="btn-upload-pdf-zoom-in" type="button" class="upload-pdf-secondary" aria-label="Inzoomen">+</button>
+            <button id="btn-upload-pdf-rotate-left" type="button" class="upload-pdf-secondary">90 links</button>
+            <button id="btn-upload-pdf-rotate-right" type="button" class="upload-pdf-secondary">90 rechts</button>
+          </div>
+        </div>
+        <div class="upload-pdf-crop-wrap">
+          <div id="upload-pdf-editor-loading" class="upload-pdf-editor-loading">
+            <div class="upload-pdf-spinner"></div>
+            <span>Pagina laden...</span>
+          </div>
+          <div class="upload-pdf-crop-stage img-editor-canvas-wrap">
+            <img id="upload-pdf-editor-img" alt="PDF pagina uitsnijden">
+          </div>
+        </div>
+        <div class="upload-pdf-footer">
+          <button id="btn-upload-pdf-editor-cancel" type="button" class="upload-btn upload-btn-grey">Bewerking sluiten</button>
+          <button id="btn-upload-pdf-editor-save" type="button" class="upload-btn upload-btn-green">Opslaan</button>
+        </div>
+      </div>
+
+      <div id="upload-pdf-form" class="upload-pdf-form" style="display:none;">
+        <div id="upload-pdf-context" class="upload-pdf-form-top"></div>
+        <div id="upload-pdf-names-list" class="upload-pdf-names-list"></div>
+        <div id="upload-pdf-progress" class="upload-pdf-progress" style="display:none;">
+          <div class="upload-pdf-progress-track">
+            <div id="upload-pdf-progress-bar" class="upload-pdf-progress-bar"></div>
+          </div>
+          <div id="upload-pdf-progress-text" class="upload-pdf-progress-text">Upload voorbereiden...</div>
+        </div>
+        <div id="upload-pdf-error" class="upload-pdf-error"></div>
+        <div class="upload-pdf-footer">
+          <button id="btn-upload-pdf-form-back" type="button" class="upload-btn upload-btn-grey">Terug naar pagina's</button>
+          <button id="btn-upload-pdf-save" type="button" class="upload-btn upload-btn-green">Voltooien</button>
+        </div>
+      </div>
+    </div>
+    <!-- Customer, location and file wizard -->
+    <div id="upload-step-form" class="upload-metadata-wizard" style="display:none;">
+      <div class="upload-wizard-header">
+        <div class="upload-pdf-kicker">Plattegrond toevoegen</div>
+        <h3 id="upload-wizard-title">Kies een klant</h3>
+        <div class="upload-wizard-progress" aria-label="Voortgang uploadwizard">
+          <span data-upload-progress="customer" class="is-active">1<span>Klant</span></span>
+          <i></i>
+          <span data-upload-progress="location">2<span>Locatie</span></span>
+          <i></i>
+          <span data-upload-progress="file">3<span>Bestand</span></span>
+        </div>
+      </div>
+      <section id="upload-wizard-customer" class="upload-wizard-panel">
+        <label class="upload-wizard-section-title" for="btn-upload-customer-options">Klant</label>
+        <div class="upload-combobox">
+          <button type="button" id="btn-upload-customer-options" class="upload-combobox-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="upload-customer-dropdown">
+            <span id="upload-customer-label">Kies een klant</span><span class="upload-combobox-chevron" aria-hidden="true">&#8964;</span>
+          </button>
+          <div id="upload-customer-dropdown" class="upload-combobox-dropdown" hidden>
+            <input type="search" id="upload-customer-search" placeholder="Klant zoeken" class="upload-input upload-combobox-search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="upload-customer-options" autocomplete="off">
+            <div id="upload-customer-options" class="upload-combobox-options" role="listbox"></div>
+          </div>
+          <select id="upload-customer-select" hidden tabindex="-1" aria-hidden="true"></select>
+        </div>
+        <button type="button" id="btn-upload-new-customer" class="upload-create-button">Aanmaken nieuwe klant</button>
+        <div id="upload-new-customer-wrapper" style="display:none;">
+          <input type="text" id="upload-new-customer" maxlength="100" placeholder="Klantnaam" class="upload-input">
+          <input type="text" id="upload-new-customer-short-name" maxlength="20" placeholder="Korte naam (optioneel)" class="upload-input">
+          <textarea id="upload-new-customer-notes" maxlength="5000" rows="2" placeholder="Notitie (optioneel)" class="upload-input"></textarea>
+          <div class="upload-inline-actions">
+            <button type="button" id="btn-upload-create-customer" class="upload-pdf-secondary">Klant aanmaken</button>
+            <button type="button" id="btn-back-to-select" class="upload-pdf-link">Terug naar klanten</button>
+          </div>
+        </div>
+      </section>
+      <section id="upload-wizard-location" class="upload-wizard-panel" style="display:none;">
+        <label class="upload-wizard-section-title" for="btn-upload-location-options">Pand / locatie</label>
+        <div class="upload-combobox">
+          <button type="button" id="btn-upload-location-options" class="upload-combobox-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="upload-location-dropdown" disabled>
+            <span id="upload-location-label">Kies een locatie</span><span class="upload-combobox-chevron" aria-hidden="true">&#8964;</span>
+          </button>
+          <div id="upload-location-dropdown" class="upload-combobox-dropdown" hidden>
+            <input type="search" id="upload-location-search" placeholder="Locatie zoeken" class="upload-input upload-combobox-search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="upload-location-options" autocomplete="off" disabled>
+            <div id="upload-location-options" class="upload-combobox-options" role="listbox"></div>
+          </div>
+          <select id="upload-location-select" hidden tabindex="-1" aria-hidden="true" disabled></select>
+        </div>
+        <button type="button" id="btn-upload-new-location" class="upload-create-button" disabled>Aanmaken nieuwe locatie</button>
+        <div id="upload-new-location-wrapper" style="display:none;">
+          <input type="text" id="upload-location-name" maxlength="100" placeholder="Bijv. Hoofdgebouw" class="upload-input">
+          <input type="text" id="upload-location-street" maxlength="100" placeholder="Straat + huisnummer (optioneel)" class="upload-input">
+          <div class="upload-field-grid">
+            <input type="text" id="upload-location-postal-code" maxlength="10" placeholder="Postcode" class="upload-input">
+            <input type="text" id="upload-location-city" maxlength="100" placeholder="Plaats" class="upload-input">
+          </div>
+          <textarea id="upload-location-notes" maxlength="5000" rows="2" placeholder="Locatie-notitie (optioneel)" class="upload-input"></textarea>
+          <div class="upload-inline-actions">
+            <button type="button" id="btn-upload-create-location" class="upload-pdf-secondary">Locatie aanmaken</button>
+            <button type="button" id="btn-upload-cancel-location" class="upload-pdf-link">Terug naar locaties</button>
+          </div>
+        </div>
+      </section>
+      <section id="upload-wizard-file" class="upload-wizard-panel upload-wizard-file-panel" style="display:none;">
+        <div class="upload-file-icon" aria-hidden="true">&#8593;</div>
+        <div class="upload-wizard-section-title">Bestanden kiezen</div>
+        <p>Sleep een of meer bestanden in dit venster of kies ze via Verkenner.</p>
+        <div id="upload-source-list" class="upload-source-list"></div>
+        <div id="upload-selected-file" class="upload-selected-file">Nog geen bestanden gekozen</div>
+        <button id="btn-upload-file" type="button" class="upload-btn upload-btn-blue">Plattegronden uploaden</button>
+      </section>
+      <div id="upload-error" class="upload-form-error"></div>
+      <div class="upload-wizard-footer">
+        <button id="btn-upload-wizard-back" type="button" class="upload-nav-button upload-nav-back" style="visibility:hidden;"><span aria-hidden="true">&#8592;</span><span>Terug</span></button>
+        <button id="btn-upload-cancel-3" type="button" class="upload-cancel-button">Annuleren</button>
+        <button id="btn-upload-wizard-next" type="button" class="upload-nav-button upload-nav-next"><span>Volgende</span><span aria-hidden="true">&#8594;</span></button>
+      </div>
+      <button id="btn-upload-cancel-1" type="button" style="display:none;">Annuleren</button>
+    </div>
+    <!-- Metadata for one image or SVG -->
+    <div id="upload-step-metadata" class="upload-single-step" style="display:none;">
+      <div class="upload-wizard-header">
+        <div class="upload-pdf-kicker">Plattegrond toevoegen</div>
+        <h3>Verdieping invullen</h3>
+        <p id="upload-metadata-context" class="upload-wizard-context"></p>
+      </div>
+      <div class="upload-single-metadata-layout">
+        <button type="button" id="upload-metadata-preview-button" class="upload-metadata-preview" aria-label="Plattegrond vergroot bekijken">
+          <img id="upload-metadata-preview-img" alt="Voorbeeld van gekozen plattegrond">
+        </button>
+        <div class="upload-single-metadata-fields">
+          <label class="upload-compact-label" for="upload-floorplan-name">Verdieping / naam</label>
+          <input type="text" id="upload-floorplan-name" maxlength="100" placeholder="Bijv. Begane grond" class="upload-input">
+          <label class="upload-compact-label" for="upload-level-order">Niveau</label>
+          <input type="number" id="upload-level-order" min="-50" max="100" step="1" placeholder="Bijv. 0" class="upload-input">
+          <label class="upload-compact-label" for="upload-floor-notes">Plattegrond-notitie</label>
+          <textarea id="upload-floor-notes" maxlength="5000" rows="3" placeholder="Optioneel" class="upload-input"></textarea>
+        </div>
+      </div>
+      <div id="upload-metadata-error" class="upload-form-error"></div>
+      <div class="upload-wizard-footer">
+        <button id="btn-upload-metadata-back" type="button" class="upload-nav-button upload-nav-back"><span aria-hidden="true">&#8592;</span><span>Terug</span></button>
+        <button id="btn-upload-save" type="button" class="upload-btn upload-btn-green">Opslaan</button>
+      </div>
+    </div>
+    <div id="upload-drop-indicator" class="upload-drop-indicator" aria-hidden="true">
+      <div><strong>Bestanden loslaten</strong><span>PDF, afbeelding of SVG</span></div>
+    </div>
+  </div>
+
+  <div id="upload-cancel-overlay" class="upload-confirm-overlay" style="display:none;"></div>
+  <div id="upload-cancel-popup" class="upload-confirm-popup" role="dialog" aria-modal="true" aria-labelledby="upload-cancel-title" style="display:none;">
+    <h3 id="upload-cancel-title">Upload stoppen?</h3>
+    <p>Ingevulde gegevens, geselecteerde bestanden en bewerkingen gaan verloren.</p>
+    <div class="upload-confirm-actions">
+      <button id="btn-upload-cancel-stay" type="button" class="upload-btn upload-btn-grey">Verdergaan</button>
+      <button id="btn-upload-cancel-confirm" type="button" class="upload-btn upload-btn-danger">Upload stoppen</button>
+    </div>
+  </div>
+
+  <!-- Delete floorplan confirmation -->
+  <div id="delete-fp-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="delete-fp-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; text-align:center; min-width:260px;">
+    <p id="delete-fp-message" style="font-size:17px; font-weight:600; color:#333; margin-bottom:20px;"></p>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="delete-fp-confirm" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#d93025; color:white; font-weight:600; cursor:pointer;">Verwijderen</button>
+      <button id="delete-fp-cancel" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Annuleren</button>
+    </div>
+  </div>
+
+  <!-- Edit uploaded floorplan metadata -->
+  <div id="metadata-fp-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:299;"></div>
+  <div id="metadata-fp-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:300; width:min(380px, calc(100vw - 32px));">
+    <h3 style="font-size:18px; color:#333; margin-bottom:16px; text-align:center;">Plattegrondgegevens</h3>
+    <div style="font-size:13px; color:#5f6368; margin-bottom:12px;">
+      <div id="metadata-fp-context"></div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <label class="upload-compact-label" for="metadata-building-name">Pand / locatie naam</label>
+      <input type="text" id="metadata-building-name" maxlength="100" placeholder="Bijv. Hoofdgebouw" class="upload-input">
+      <label class="upload-compact-label" for="metadata-location-street">Straat + huisnummer</label>
+      <input type="text" id="metadata-location-street" maxlength="100" class="upload-input">
+      <div class="upload-field-grid">
+        <label class="upload-compact-field">Postcode<input type="text" id="metadata-location-postal-code" maxlength="10" class="upload-input"></label>
+        <label class="upload-compact-field">Plaats<input type="text" id="metadata-location-city" maxlength="100" class="upload-input"></label>
+      </div>
+      <label class="upload-compact-label" for="metadata-location-note">Locatie-notitie</label>
+      <textarea id="metadata-location-note" maxlength="5000" class="upload-input metadata-location-note" rows="2"></textarea>
+      <label class="upload-compact-label" for="metadata-floor-label">Verdieping / naam</label>
+      <input type="text" id="metadata-floor-label" maxlength="100" placeholder="Bijv. Begane grond" class="upload-input">
+      <label class="upload-compact-label" for="metadata-level-order">Niveau</label>
+      <input type="number" id="metadata-level-order" min="-50" max="100" step="1" class="upload-input">
+      <label class="upload-compact-label" for="metadata-floor-notes">Plattegrond-notitie</label>
+      <textarea id="metadata-floor-notes" maxlength="5000" class="upload-input metadata-location-note" rows="2"></textarea>
+      <div id="metadata-fp-error" style="color:#d93025; font-size:14px; font-weight:600; min-height:20px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button id="metadata-fp-cancel" type="button" style="font-size:16px; padding:10px 20px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Annuleren</button>
+        <button id="metadata-fp-save" type="button" style="font-size:16px; padding:10px 20px; border:none; border-radius:8px; background:#1a73e8; color:white; font-weight:600; cursor:pointer;">Opslaan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image editor (for uploaded floorplans) -->
+  <div id="img-editor-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:#1a1a1a; z-index:510; flex-direction:column; touch-action:none;">
+    <!-- Top bar -->
+    <div class="img-editor-topbar">
+      <button id="img-editor-cancel" class="img-editor-btn-top img-editor-btn-cancel">&#8592; Annuleren</button>
+      <span class="img-editor-title">Afbeelding uitsnijden</span>
+      <span style="min-width:88px;"></span>
+    </div>
+    <!-- Canvas area -->
+    <div class="img-editor-canvas-wrap" id="img-editor-canvas-wrap">
+      <div id="img-editor-stage" class="img-editor-stage">
+        <img id="img-editor-crop-image" alt="Plattegrond uitsnijden">
+        <canvas id="img-editor-canvas" style="display:none;"></canvas>
+      </div>
+    </div>
+    <!-- Brush size row (gum mode only) -->
+    <div id="img-editor-brush-row" class="img-editor-brush-row" style="display:none;">
+      <label for="img-editor-brush-slider" class="img-editor-brush-label">Kwast: <span id="img-editor-brush-val">30</span>px</label>
+      <input id="img-editor-brush-slider" type="range" min="10" max="120" value="30" class="img-editor-brush-slider">
+    </div>
+    <!-- Bottom toolbar -->
+    <div class="img-editor-toolbar">
+      <button id="img-editor-tool-pan"    class="img-editor-tool active" style="display:none;">&#9995; Verplaatsen</button>
+      <button id="img-editor-tool-crop"   class="img-editor-tool active">&#9986; Uitsnede aanpassen</button>
+      <button id="img-editor-tool-erase"  class="img-editor-tool" style="display:none;">&#9676; Wissen</button>
+      <button id="img-editor-tool-rotate-left"  class="img-editor-tool img-editor-rotate">&#8630; 90° links</button>
+      <button id="img-editor-tool-rotate-right" class="img-editor-tool img-editor-rotate">&#8631; 90° rechts</button>
+      <button id="img-editor-apply-crop"  class="img-editor-tool img-editor-apply" style="display:none;">&#10003; Toepassen</button>
+      <button id="img-editor-undo"        class="img-editor-tool img-editor-undo-btn" disabled style="display:none;">&#8617; Ongedaan</button>
+      <button id="img-editor-save"        class="img-editor-tool img-editor-save">&#128190; Opslaan</button>
+    </div>
+  </div>
+  <!-- Editor cancel confirmation -->
+  <div id="editor-cancel-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:520;"></div>
+  <div id="editor-cancel-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:521; text-align:center; min-width:260px;">
+    <p style="font-size:17px; font-weight:600; color:#333; margin-bottom:20px;">Wijzigingen annuleren?<br>Alles wordt teruggedraaid.</p>
+    <div style="display:flex; gap:8px; justify-content:center;">
+      <button id="editor-cancel-confirm" style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#d93025; color:white; font-weight:600; cursor:pointer;">Ja, annuleren</button>
+      <button id="editor-cancel-back"    style="font-size:16px; padding:10px 24px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Terug</button>
+    </div>
+  </div>
+  <div id="crop-outside-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:522;"></div>
+	  <div id="crop-outside-popup" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:24px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.3); z-index:523; text-align:left; width:min(420px, calc(100vw - 32px));">
+	    <h3 style="font-size:18px; color:#333; margin-bottom:12px;">Deuren buiten uitsnede</h3>
+	    <p style="font-size:15px; color:#555; line-height:1.5; margin-bottom:12px;">Deze deurcodes vallen buiten de nieuwe uitsnede en worden verwijderd als je doorgaat:</p>
+	    <div id="crop-outside-codes" style="max-height:180px; overflow:auto; padding:10px 12px; background:#f5f5f5; border-radius:8px; font-size:15px; font-weight:700; color:#333; margin-bottom:18px;"></div>
+	    <div style="display:flex; gap:8px; justify-content:flex-end;">
+	      <button id="crop-outside-cancel" style="font-size:16px; padding:10px 22px; border:none; border-radius:8px; background:#e0e0e0; color:#333; font-weight:600; cursor:pointer;">Annuleren</button>
+	      <button id="crop-outside-confirm" style="font-size:16px; padding:10px 22px; border:none; border-radius:8px; background:#d93025; color:white; font-weight:600; cursor:pointer;">Doorgaan</button>
+	    </div>
+	  </div>
+	  <div id="image-editor-save-error-overlay" class="image-editor-save-error-overlay" style="display:none;"></div>
+	  <div id="image-editor-save-error-popup" class="image-editor-save-error-popup" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="image-editor-save-error-title">
+	    <h3 id="image-editor-save-error-title">Opslaan lukt niet</h3>
+	    <p id="image-editor-save-error-message">Deze plattegrond is te groot om op te slaan. Probeer een iets kleinere uitsnede of meld dit bij Mark.</p>
+	    <pre id="image-editor-save-error-details"></pre>
+	    <div class="image-editor-save-error-actions">
+	      <button id="image-editor-save-error-copy" type="button" class="image-editor-save-error-secondary">Details kopiëren</button>
+	      <button id="image-editor-save-error-close" type="button" class="image-editor-save-error-primary">Sluiten</button>
+	    </div>
+	  </div>
+
+	  <!-- Fullscreen image viewer (for upload preview zoom) -->
+  <div id="img-fullscreen-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.95); z-index:500; overflow:auto; touch-action:auto; -webkit-overflow-scrolling:touch;">
+    <div style="display:flex; justify-content:center; align-items:flex-start; min-height:100%; padding:60px 16px 24px;">
+      <img id="img-fullscreen-img" style="max-width:100%; height:auto; border-radius:6px; touch-action:auto;">
+    </div>
+    <button id="img-fullscreen-close" style="position:fixed; top:12px; right:12px; padding:10px 18px; background:white; border:none; border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; z-index:501; box-shadow:0 2px 8px rgba(0,0,0,0.3);">&#10005; Sluiten</button>
+  </div>
+
+  </div><!-- /app-container -->
+
+  <script src="env-config.js?v=1.9.88"></script>
+  <script src="data-service-core.js?v=1.9.88"></script>
+  <script src="data-service-floorplan.js?v=1.9.88"></script>
+  <script src="data-service-authoring.js?v=1.9.88"></script>
+  <script src="data-service.js?v=1.9.88"></script>
+  <script src="diagnostics-service.js?v=1.9.88"></script>
+  <script src="floorplan-cache-core.js?v=1.9.88"></script>
+  <script src="floorplan-cache-warmup.js?v=1.9.88"></script>
+  <script src="floorplan-cache-service.js?v=1.9.88"></script>
+  <script src="floorplan-view-service.js?v=1.9.88"></script>
+  <script src="auth-session.js?v=1.9.88"></script>
+  <script src="auth-notifications.js?v=1.9.88"></script>
+  <script src="auth-controller.js?v=1.9.88"></script>
+  <script src="auth-service.js?v=1.9.88"></script>
+  <script src="status-service.js?v=1.9.88"></script>
+  <script src="status-sync-service.js?v=1.9.88"></script>
+  <script src="mode-service.js?v=1.9.88"></script>
+  <script src="image-editor-service.js?v=1.9.88"></script>
+  <script src="viewport-service.js?v=1.9.88"></script>
+  <script src="marker-service.js?v=1.9.88"></script>
+  <script src="admin-identity-service.js?v=1.9.88"></script>
+  <script src="door-action-service.js?v=1.9.88"></script>
+  <script src="door-code-conflict-service.js?v=1.9.88"></script>
+  <script src="ui-shell-service.js?v=1.9.88"></script>
+  <script src="export-service.js?v=1.9.88"></script>
+  <script src="export-flow-service.js?v=1.9.88"></script>
+  <script src="edit-ui-service.js?v=1.9.88"></script>
+  <script src="pdf-import-service.js?v=1.9.88"></script>
+  <script src="upload-core.js?v=1.9.88"></script>
+  <script src="upload-combobox.js?v=1.9.88"></script>
+  <script src="upload-file-handlers.js?v=1.9.88"></script>
+  <script src="upload-pdf-state.js?v=1.9.88"></script>
+  <script src="upload-pdf-ui.js?v=1.9.88"></script>
+  <script src="upload-pdf-form.js?v=1.9.88"></script>
+  <script src="upload-pdf-controller.js?v=1.9.88"></script>
+  <script src="upload-batch-controller.js?v=1.9.88"></script>
+  <script src="upload-batch-import.js?v=1.9.88"></script>
+  <script src="upload-wizard-controller.js?v=1.9.88"></script>
+  <script src="upload-controller.js?v=1.9.88"></script>
+  <script src="upload-actions.js?v=1.9.88"></script>
+  <script src="upload-service.js?v=1.9.88"></script>
+  <script src="upload-save-selection-service.js?v=1.9.88"></script>
+  <script src="select-sheet-core.js?v=1.9.88"></script>
+  <script src="select-sheet-navigator.js?v=1.9.88"></script>
+  <script src="select-sheet-dom.js?v=1.9.88"></script>
+  <script src="select-sheet-service.js?v=1.9.88"></script>
+  <script src="side-panel-service.js?v=1.9.88"></script>
+  <script src="door-inspector-view.js?v=1.9.88"></script>
+  <script src="door-inspector-service.js?v=1.9.88"></script>
+  <script src="inspection-form-diff.js?v=1.9.88"></script>
+  <script src="inspection-form-config.js?v=1.9.88"></script>
+  <script src="maintenance-form-flow.js?v=1.9.88"></script>
+  <script src="maintenance-form-renderer-content.js?v=1.9.88"></script>
+  <script src="maintenance-form-renderer.js?v=1.9.88"></script>
+  <script src="inspection-form-service.js?v=1.9.88"></script>
+  <script src="app-01-config-state.js?v=1.9.88"></script>
+  <script src="app-02-shell-update-a.js?v=1.9.88"></script>
+  <script src="app-03-shell-update-b.js?v=1.9.88"></script>
+  <script src="app-04-data-loading-a.js?v=1.9.88"></script>
+  <script src="app-05-jotform-cache-a.js?v=1.9.88"></script>
+  <script src="app-06-jotform-cache-b.js?v=1.9.88"></script>
+  <script src="app-07-session-permissions.js?v=1.9.88"></script>
+  <script src="app-08-selector-door-index.js?v=1.9.88"></script>
+  <script src="app-09-selector-sheet.js?v=1.9.88"></script>
+  <script src="app-10-admin-sessions.js?v=1.9.88"></script>
+  <script src="app-11-admin-overview.js?v=1.9.88"></script>
+  <script src="app-12-admin-floorplans.js?v=1.9.88"></script>
+  <script src="app-13-admin-bulk-metadata.js?v=1.9.88"></script>
+  <script src="app-14-admin-detail-save.js?v=1.9.88"></script>
+  <script src="app-15-floorplan-door-selection.js?v=1.9.88"></script>
+  <script src="app-16-edit-mode-start.js?v=1.9.88"></script>
+  <script src="app-17-edit-labels.js?v=1.9.88"></script>
+  <script src="app-18-export-upload-actions.js?v=1.9.88"></script>
+  <script src="app-19-status-pan-zoom.js?v=1.9.88"></script>
+  <script src="app-20-status-sidepanel-upload.js?v=1.9.88"></script>
+  <script src="app-21-events-edit-auth.js?v=1.9.88"></script>
+  <script src="app-22-init-image-editor-a.js?v=1.9.88"></script>
+  <script src="app-23-image-editor-view.js?v=1.9.88"></script>
+  <script src="app-24-image-editor-save-a.js?v=1.9.88"></script>
+  <script src="app-25-image-editor-save-b.js?v=1.9.88"></script>
+  <script src="app.js?v=1.9.88"></script>
+</body>
+</html>

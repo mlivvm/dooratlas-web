@@ -1,0 +1,11 @@
+{
+  "version": "1.9.88",
+  "cache": "da-live-v1.9.88",
+  "environment": "production",
+  "sourceCommit": "2f0c1c3daad4cf52c8d3577a432ca0f59b176b83",
+  "sourceShortCommit": "2f0c1c3daad4",
+  "sourceDirty": false,
+  "deployedAt": "2026-07-17T03:17:11.008Z",
+  "appUrl": "https://app.datasidekick.nl",
+  "workerBaseUrl": "https://api.datasidekick.nl"
+}
