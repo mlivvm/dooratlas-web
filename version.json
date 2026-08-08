@@ -1,0 +1,11 @@
+{
+  "version": "1.10.59",
+  "cache": "da-live-v1.10.59",
+  "environment": "production",
+  "sourceCommit": "45d36f7c81821589a60662cd4e9b21656764f825",
+  "sourceShortCommit": "45d36f7c8182",
+  "sourceDirty": false,
+  "deployedAt": "2026-08-08T05:58:47.298Z",
+  "appUrl": "https://app.datasidekick.nl",
+  "workerBaseUrl": "https://api.datasidekick.nl"
+}
