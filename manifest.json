@@ -1,0 +1,23 @@
+{
+  "name": "DoorAtlas",
+  "short_name": "DoorAtlas",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#12294d",
+  "theme_color": "#12294d",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "dooratlas-icon.svg?v=1.10.93",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "dooratlas-icon.svg?v=1.10.93",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

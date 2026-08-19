@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="t d">
+  <title id="t">DoorAtlas</title>
+  <desc id="d">DoorAtlas app-icoon: plattegrond met deur en locatiepin</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12294D"/>
+      <stop offset="1" stop-color="#08172C"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(3.75) translate(-54 -54)">
+    <g transform="translate(-4.9 0.5)">
+      <rect x="40.8" y="35.4" width="4.8" height="28.2" fill="#4E9BFF"/>
+      <rect x="40.8" y="77.4" width="4.8" height="10.8" fill="#4E9BFF"/>
+      <rect x="77.4" y="35.4" width="4.8" height="52.8" fill="#4E9BFF"/>
+      <path fill="#F7FBFF" d="M20 31h21.4v4.4H24.6v52.8H54V93H20V31Z"/>
+      <path fill="#F7FBFF" d="M80.4 31h17.4v62H76.8v-4.8H93V35.4H80.4V31Z"/>
+      <rect x="75" y="68.4" width="2.4" height="24.6" fill="#F7FBFF"/>
+      <path fill="none" stroke="#F7FBFF" stroke-opacity="0.65" stroke-width="1.4" d="M54.6 89.4A21 21 0 0 1 75 68.4"/>
+      <path fill="#EC6033" d="M60 14a17 17 0 0 0-17 17c0 12.2 17 33.2 17 33.2S77 43.2 77 31a17 17 0 0 0-17-17Z"/>
+      <circle cx="60" cy="31" r="7.8" fill="#F7FBFF"/>
+    </g>
+  </g>
+</svg>
